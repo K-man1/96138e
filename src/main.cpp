@@ -27,6 +27,7 @@ void screenTask() {
         pros::lcd::print(2, "Theta: %.2f", chassis.getPose().theta);
         pros::lcd::print(3, "Lift: %.2f", liftmotors.get_position());
         pros::lcd::print(4, "Rotation: %.2f degrees", degrees);
+        pros::lcd::print(7, "Stack: %d mm", stackSensor.get_distance());
 
         pros::delay(50);
     }
@@ -54,6 +55,11 @@ void initialize() {
     // wrist.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
 
     pros::Task screen(screenTask);
+
+    double start = 144 - right.get_distance() * 0.0393701 - 6; // convert mm to inches
+    chassis.setPose(start, 0, 0); //start
+    pros::lcd::print(6, "Start: %.2f in", start);
+
 }
 
 /*
@@ -70,36 +76,7 @@ void competition_initialize() {}
  * Runs during auton
  */
 void autonomous() {
-    // set position to x:0, y:0, heading:0
-    // liftmotors.move(127);
-    // pros::delay(1200);
-    // liftmotors.move(0);
-    // liftmotors.brake();
-    // // pros::delay(500);
-    // chassis.setPose(0, 0, 0);
-    // chassis.turnToHeading(90, 2000);
-    chassis.setPose(0, 0, 0);
-    maxY = 0;
-    // turn to face heading 90 with a very long timeout
-    // chassis.turnToHeading(90, 2000);
-
-    // raise the lift all the way, then hold it there
-    // liftmotors.move(127);
-    // pros::delay(1000);
-    // liftmotors.brake(); // brake mode is HOLD (set in initialize)
-
-    // // let the robot settle before driving
-    // pros::delay(500);
-
-    // LINEAR PID TUNING: drive 48" (2 tiles) forward, long timeout
-    uint32_t startTime = pros::millis();
-    chassis.moveToPoint(0, 48, 10000);
-    chassis.waitUntilDone();
-    pros::lcd::print(6, "Move time: %d ms", (int)(pros::millis() - startTime));
-    // chassis.setPose(0, 0, 0);
-    // // turn to face heading 90 with a very long timeout
-    // chassis.turnToHeading(180, 2000);
-    // // auton2();
+    auton1();
 }
 
 /**

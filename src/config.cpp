@@ -18,7 +18,10 @@ pros::Motor clamp(7);
 
 pros::IMU imu(4);
 pros::Rotation rotation_sensor(14);
-// pros::Distance clamper(6);
+pros::Distance front_1(); //unplugged rn
+pros::Distance front_2(); //unplugged rn
+pros::Distance right(13); // distance sensor on the right side
+pros::Distance stackSensor(6); // distance sensor that sees the stacks
 
 /*
 // creating sensors, track how many degrees vertical and horizontal tracking wheels have spun
@@ -71,9 +74,9 @@ lemlib::ControllerSettings linearController(20, // proportional gain (kP)
 );
 
 // angular motion controller
-lemlib::ControllerSettings angularController(9, // proportional gain (kP)
+lemlib::ControllerSettings angularController(6, // proportional gain (kP)
                                              0, // integral gain (kI)
-                                             50, // derivative gain (kD)
+                                             37, // derivative gain (kD)
                                              0.48, // anti windup (only used if kI > 0)
                                              1, // small error range, in degrees
                                              100, // small error range timeout, in milliseconds

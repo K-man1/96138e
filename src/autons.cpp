@@ -1,6 +1,7 @@
 ﻿#include "autons.hpp"
 #include "config.hpp"
 #include "lift.hpp"
+#include "clamp.hpp"
 
 // get a path used for pure pursuit
 // this needs to be put outside a function
@@ -56,78 +57,67 @@ else if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
 // Routines
 // ---------------------------------------------------------------------------
 
+
 void auton1() {
-
-    int timeout = 0;
-    while (imu.is_calibrating() && timeout < 300) { // 300 * 10ms = 3000ms max
-        pros::delay(10);
-        timeout++;
-    }
-
-    chassis.cancelAllMotions();
-
-    // wrist.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-    liftmotors.tare_position();
-    // wrist.tare_position();
-
-    chassis.moveToPoint(-0.02, 3.38, 1000);
-    chassis.setPose(0,0,0,1000);
+    clamp.move(127); //start intake
+    chassis.tank(90, 90);
+    pros::delay(500);
+    chassis.tank(0, 0);
+    pros::delay(100);
+    chassis.tank(-120, -120);
+    pros::delay(500);
+    chassis.tank(0, 0);
 
 
-    liftAutoHeight(42);
-    chassis.moveToPoint(-0.33, -6, 1000, {.forwards = false});
-    pros::delay(1000);
+    //----------------TOGGLE---------------
 
-    liftAutoHeight(25);
-    chassis.turnToPoint(-0.84, 4.0, 800);
-    chassis.moveToPoint(-0.84, 4.0, 1000, {
-        .forwards = true,
-        .maxSpeed = 127,
-        .minSpeed = 127,
-        .earlyExitRange = 1.0
-    });
-    pros::delay(200);
+    double start = 144 - right.get_distance() * 0.0393701 - 6; // convert mm to inches
+    pros::lcd::print(6, "Start: %.2f in", start);
+    chassis.setPose(start, 0, 0); //start
 
-    chassis.moveToPose(0.69, 8.27, 62.17, 1000);
+    chassis.moveToPoint(start, 16, 2000); // align w goal
 
-    liftAutoHeight(0.5);
-    pros::delay(200);
+    chassis.turnToHeading(90, 2000); //turn to alliance goal
 
-    liftAutoHeight(3.81);
-    pros::delay(200);
+    liftAutoHeight(19); //lift lift
 
-    // intake motor removed from the robot
-    // intake.move(127);
-    // claw.move(127);
+
+    chassis.moveToPoint(89, 16, 2000, {.maxSpeed = 50}); //go into goal
+
+    
+    chassis.waitUntilDone();
+    liftAutoHeight(10);
+    pros::delay(100); 
+    chassis.turnToHeading(90, 1000);
+    clamp.move(-10); //outtake
+    pros::delay(300); //wait
+    clamp.move(0); //stop clamp
+
+    //-------------PRELOAD + TOGGLE-----------------
+
+    chassis.moveToPoint(72, 16, 2000, {.forwards = false}); //back out of goal
+    chassis.turnToHeading(45, 1000);// turn to stack
+    chassis.moveToPoint(96, 40, 3000, {.maxSpeed = 80}); //go to 1st stack (45 deg line from 72,16)
+    clampWhenClose(55, 3000); // clamp the moment the stack is 55mm away // if 50mm, intake
+
+
+    chassis.turnToHeading(180, 1000);
+    liftAutoHeight(19);
+    chassis.moveToPoint(96, 18, 3000);
+    chassis.waitUntilDone();
+    liftAutoHeight(16);
+    clamp.move(-127);
     pros::delay(2000);
-    // intake.move(0);
-    // claw.move(0);
-
-    chassis.moveToPose(0.43, 8.87, 56.85, 1000);
-    raiseWristAuto();
-    chassis.moveToPose(2.92, 7.75, 116.23, 1000);
-    chassis.moveToPoint(4.38, 7.59, 1000);
-    chassis.moveToPose(9.09, 8.3, 46.49, 1000);
-    chassis.moveToPoint(14.65, 13.4, 1000);
-    chassis.moveToPoint(12.92, 13.72, 1000);
-    chassis.moveToPose(13.38, 13.29, 96.47, 1000);
-
-    /*
-    claw.move(-127);
-    pros::delay(1000);
-    claw.move(0);
-    */
+    // chassis.moveToPoint(87, 37, 3000, {.forwards = false});
+    // chassis.turnToHeading(135, 1000);
+    // clamp.move(127);
+    // liftAutoHeight(3);
 
 
+    
 }
 
 void auton2() {
-
-    int timeout = 0;
-    while (imu.is_calibrating() && timeout < 300) { // 300 * 10ms = 3000ms max
-        pros::delay(10);
-        timeout++;
-    }
 
     chassis.cancelAllMotions();
 

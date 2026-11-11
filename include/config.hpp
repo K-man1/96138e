@@ -6,6 +6,10 @@
 // All devices are created in src/config.cpp.
 // Include this file anywhere you need to use them.
 
+// build number: bump this every upload so you can check the robot has the new code
+// (shown on the controller screen and brain line 7)
+constexpr int BUILD_NUM = 2;
+
 // handheld controller
 extern pros::Controller controller;
 
@@ -20,6 +24,8 @@ extern pros::Motor clamp;
 // sensors
 extern pros::IMU imu;
 extern pros::Rotation rotation_sensor;
+extern pros::Distance right; // right-side distance sensor (port 13)
+extern pros::Distance stackSensor; // sees the stacks in front of the clamp (port 6)
 
 // LemLib chassis (drivetrain + PID + odom)
 extern lemlib::Chassis chassis;

@@ -78,5 +78,10 @@ void liftAutoHeight(double target_deg) {
         }
     }
 
-    liftmotors.brake();
+    // hold both motors at the same spot (same as driver control) so the lift
+    // levels out even if one side lagged on the way up. brake() would freeze
+    // each motor wherever it stopped and keep the slant.
+    liftmotors.move_velocity(0);
+    double currentPos = liftmotors.get_position(); // motor 15's position
+    liftmotors.move_absolute(currentPos, 100);     // send BOTH motors there
 }

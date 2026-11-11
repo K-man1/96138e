@@ -46,6 +46,34 @@ static void clampToggle() {
     }
 }
 
+bool clampWhenClose(int triggerMm, int timeoutMs) {
+    uint32_t start = pros::millis();
+    int closest = 9999; // closest reading seen, for the screen
+
+    while (pros::millis() - start < (uint32_t)timeoutMs) {
+        int dist = stackSensor.get_distance(); // mm
+
+        // ignore bad readings (PROS_ERR / 0 when nothing is seen)
+        if (dist > 0 && dist != PROS_ERR) {
+            if (dist < closest) closest = dist;
+
+            if (dist <= triggerMm) {
+                clamp.move(127);
+                pros::lcd::print(6, "Clamp: hit at %d mm", dist);
+                return true;
+            }
+        }
+
+        pros::delay(10); // sensor updates about every 33ms, 10ms is plenty
+    }
+
+    // never got close enough: intake anyway so the auton doesn't miss the stack,
+    // and show the closest reading so you can tune triggerMm
+    clamp.move(127);
+    pros::lcd::print(6, "Clamp: TIMEOUT closest %d mm", closest);
+    return false;
+}
+
 void clampControl() {
     // clampHold();
     clampToggle();

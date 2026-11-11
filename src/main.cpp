@@ -3,6 +3,7 @@
 #include "lift.hpp"
 #include "clamp.hpp"
 #include "autons.hpp"
+#include <cmath>
 
 // Where things live:
 //   config.cpp  - ports, motors, sensors, LemLib chassis + PID
@@ -25,9 +26,9 @@ void screenTask() {
         pros::lcd::print(0, "X: %.2f", chassis.getPose().x);
         pros::lcd::print(1, "Y: %.2f", chassis.getPose().y);
         pros::lcd::print(2, "Theta: %.2f", chassis.getPose().theta);
-        pros::lcd::print(3, "Lift: %.2f", liftmotors.get_position());
+        pros::lcd::print(3, "Lift L: %.1f  R: %.1f", liftmotors.get_position(0), liftmotors.get_position(1));
         pros::lcd::print(4, "Rotation: %.2f degrees", degrees);
-        pros::lcd::print(7, "Stack: %d mm", stackSensor.get_distance());
+        pros::lcd::print(7, "Stack: %d mm  Back: %d mm", stackSensor.get_distance(), backSensor.get_distance());
 
         pros::delay(50);
     }
@@ -43,6 +44,21 @@ void initialize() {
 
     chassis.calibrate();
 
+    // chassis.calibrate() can return while the IMU is still calibrating.
+    // If odom reads the IMU then, it gets "infinity", the heading becomes NaN,
+    // and every LemLib move (moveToPoint, turnToHeading...) silently does nothing
+    // for the rest of the run. chassis.tank() still works since it skips odom.
+    // So wait here until the IMU gives a real number (max 3 s).
+    uint32_t imuWaitStart = pros::millis();
+    while ((imu.is_calibrating() || !std::isfinite(imu.get_rotation())) &&
+           pros::millis() - imuWaitStart < 3000) {
+        pros::delay(10);
+    }
+    if (!std::isfinite(imu.get_rotation())) {
+        controller.print(0, 0, "IMU NOT READY");
+    }
+    pros::delay(50); // let odom take a few good IMU readings before setPose clears the heading
+
     chassis.setPose(0, 0, 0);
     rotation_sensor.reset_position();
     pros::delay(50);
@@ -57,8 +73,9 @@ void initialize() {
     pros::Task screen(screenTask);
 
     double start = 144 - right.get_distance() * 0.0393701 - 6; // convert mm to inches
-    chassis.setPose(start, 0, 0); //start
-    pros::lcd::print(6, "Start: %.2f in", start);
+    double startY = backSensor.get_distance() * 0.0393701 + 3.6; // back wall is y = 0, convert mm to inches, +3 sensor-to-center
+    chassis.setPose(start, startY, 0); //start
+    pros::lcd::print(6, "Start: %.2f, %.2f in", start, startY);
 
 }
 

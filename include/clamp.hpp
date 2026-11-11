@@ -6,10 +6,8 @@
 //   X         = step through: forward -> stop -> reverse -> stop
 void clampControl();
 
-// Auton: keeps reading the stack distance sensor (port 6) and runs
-// clamp.move(127) the moment it reads triggerMm or closer.
-// Blocks until it clamps or timeoutMs runs out. Returns true if the sensor
-// triggered it. On timeout it still runs the clamp and returns false.
-// Brain line 6 shows the reading it triggered at, or the closest it saw.
-// LemLib motions run in the background, so call this right after moveToPoint.
-bool clampWhenClose(int triggerMm = 55, int timeoutMs = 3000);
+// Auton: for the next timeoutMs, if the stack sensor (port 6) reads
+// triggerMm or closer, run clamp.move(127). That's it.
+// Runs in the background: returns immediately and never touches the drive.
+// Brain line 6 shows "intake at __ mm" or "never saw it".
+void clampWhenClose(int triggerMm = 100, int timeoutMs = 3000);

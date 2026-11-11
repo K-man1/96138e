@@ -59,6 +59,9 @@ else if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
 
 
 void auton1() {
+
+    chassis.setPose(0, 0, 0);
+
     clamp.move(127); //start intake
     chassis.tank(90, 90);
     pros::delay(500);
@@ -68,48 +71,58 @@ void auton1() {
     pros::delay(500);
     chassis.tank(0, 0);
 
-
+    chassis.turnToHeading(0, 1000);
     //----------------TOGGLE---------------
 
     double start = 144 - right.get_distance() * 0.0393701 - 6; // convert mm to inches
-    pros::lcd::print(6, "Start: %.2f in", start);
-    chassis.setPose(start, 0, 0); //start
+    double startY = backSensor.get_distance() * 0.0393701 + 3.4; // back sensor Y after the bump, mm to inches, +3 sensor-to-center
+    pros::lcd::print(6, "Start: %.2f, %.2f in", start, startY);
+    chassis.setPose(start, startY, 0); //start
 
-    chassis.moveToPoint(start, 16, 2000); // align w goal
+    chassis.moveToPoint(start, 26, 5000); // align w goal
+
 
     chassis.turnToHeading(90, 2000); //turn to alliance goal
 
     liftAutoHeight(19); //lift lift
 
 
-    chassis.moveToPoint(89, 16, 2000, {.maxSpeed = 50}); //go into goal
+    chassis.moveToPoint(89, 26, 2000, {.maxSpeed = 50}); //go into goal
 
     
     chassis.waitUntilDone();
-    liftAutoHeight(10);
+    liftAutoHeight(5);
     pros::delay(100); 
     chassis.turnToHeading(90, 1000);
-    clamp.move(-10); //outtake
+    clamp.move(-60); //outtake
     pros::delay(300); //wait
-    clamp.move(0); //stop clamp
+    clamp.move(-0);
 
     //-------------PRELOAD + TOGGLE-----------------
 
-    chassis.moveToPoint(72, 16, 2000, {.forwards = false}); //back out of goal
-    chassis.turnToHeading(45, 1000);// turn to stack
-    chassis.moveToPoint(96, 40, 3000, {.maxSpeed = 80}); //go to 1st stack (45 deg line from 72,16)
-    clampWhenClose(55, 3000); // clamp the moment the stack is 55mm away // if 50mm, intake
+    chassis.moveToPoint(72, 24, 2000, {.forwards = false}); //back out of goal
+    chassis.turnToPoint(96, 54, 1000);
+    
+    chassis.moveToPoint(96, 50, 3000, {.maxSpeed = 50}); //go to 1st stack (about 45 deg from 72,24)
+
+    clamp.move(-127);
+    clampWhenClose(150, 5000); // for the next 3s, intake if the stack is within 100mm
 
 
     chassis.turnToHeading(180, 1000);
     liftAutoHeight(19);
-    chassis.moveToPoint(96, 18, 3000);
+    chassis.moveToPoint(96, 28, 3000, {.maxSpeed = 60}); //go to alliance goal
     chassis.waitUntilDone();
     liftAutoHeight(16);
-    clamp.move(-127);
+    clamp.move(-120);
     pros::delay(2000);
-    // chassis.moveToPoint(87, 37, 3000, {.forwards = false});
-    // chassis.turnToHeading(135, 1000);
+    chassis.moveToPoint(96, 40, 3000, {.forwards = false});
+    chassis.turnToPoint(120, 24, 1000);
+    chassis.moveToPoint(120, 24, 3000);
+    clampWhenClose(150, 5000);
+    pros::delay(1000);
+    chassis.turnToHeading(-90, 1000);
+    liftAutoHeight(25);
     // clamp.move(127);
     // liftAutoHeight(3);
 

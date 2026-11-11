@@ -8,7 +8,7 @@
 
 // build number: bump this every upload so you can check the robot has the new code
 // (shown on the controller screen and brain line 7)
-constexpr int BUILD_NUM = 2;
+constexpr int BUILD_NUM = 3;
 
 // handheld controller
 extern pros::Controller controller;
@@ -26,6 +26,7 @@ extern pros::IMU imu;
 extern pros::Rotation rotation_sensor;
 extern pros::Distance right; // right-side distance sensor (port 13)
 extern pros::Distance stackSensor; // sees the stacks in front of the clamp (port 6)
+extern pros::Distance backSensor; // back of the robot, measures starting Y (port 18)
 
 // LemLib chassis (drivetrain + PID + odom)
 extern lemlib::Chassis chassis;

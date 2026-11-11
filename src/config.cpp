@@ -22,6 +22,7 @@ pros::Distance front_1(); //unplugged rn
 pros::Distance front_2(); //unplugged rn
 pros::Distance right(13); // distance sensor on the right side
 pros::Distance stackSensor(6); // distance sensor that sees the stacks
+pros::Distance backSensor(18); // distance sensor on the back, measures starting Y
 
 /*
 // creating sensors, track how many degrees vertical and horizontal tracking wheels have spun

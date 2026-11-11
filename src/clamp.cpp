@@ -46,32 +46,27 @@ static void clampToggle() {
     }
 }
 
-bool clampWhenClose(int triggerMm, int timeoutMs) {
-    uint32_t start = pros::millis();
-    int closest = 9999; // closest reading seen, for the screen
+void clampWhenClose(int triggerMm, int timeoutMs) {
+    // runs in the background, so the auton keeps going while this watches
+    pros::Task([triggerMm, timeoutMs] {
+        const uint32_t deadline = pros::millis() + timeoutMs;
 
-    while (pros::millis() - start < (uint32_t)timeoutMs) {
-        int dist = stackSensor.get_distance(); // mm
+        while (pros::millis() < deadline) {
+            int dist = stackSensor.get_distance(); // mm
 
-        // ignore bad readings (PROS_ERR / 0 when nothing is seen)
-        if (dist > 0 && dist != PROS_ERR) {
-            if (dist < closest) closest = dist;
-
-            if (dist <= triggerMm) {
+            // within range -> intake, done. (0 / PROS_ERR = bad reading, skip)
+            if (dist > 0 && dist != PROS_ERR && dist <= triggerMm) {
                 clamp.move(127);
-                pros::lcd::print(6, "Clamp: hit at %d mm", dist);
-                return true;
+                pros::lcd::print(6, "Clamp: intake at %d mm", dist);
+                return;
             }
+
+            pros::delay(10);
         }
 
-        pros::delay(10); // sensor updates about every 33ms, 10ms is plenty
-    }
-
-    // never got close enough: intake anyway so the auton doesn't miss the stack,
-    // and show the closest reading so you can tune triggerMm
-    clamp.move(127);
-    pros::lcd::print(6, "Clamp: TIMEOUT closest %d mm", closest);
-    return false;
+        // time ran out without seeing it -> do nothing
+        pros::lcd::print(6, "Clamp: never saw it");
+    });
 }
 
 void clampControl() {

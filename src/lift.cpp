@@ -52,6 +52,24 @@ void liftControl() {
     }
 }
 
+// the two lift sides, so auton can power them separately
+// (same ports/directions as liftmotors in config.cpp)
+static pros::Motor liftLeft(15);
+static pros::Motor liftRight(-16);
+
+// how hard to pull the sides back together, power per degree of difference
+constexpr double kLiftSync = 3.0;
+
+// drive the lift at `power`, but slow down whichever side is ahead so the
+// two sides move together. if one side gets stuck (e.g. resting on a goal),
+// the other side stops too instead of going on alone and tilting the lift.
+static void moveLiftLevel(int power) {
+    double diff = liftLeft.get_position() - liftRight.get_position();
+    int correction = static_cast<int>(diff * kLiftSync);
+    liftLeft.move(power - correction);
+    liftRight.move(power + correction);
+}
+
 void liftAutoHeight(double target_deg) {
     liftmotors.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
 
@@ -62,7 +80,7 @@ void liftAutoHeight(double target_deg) {
     // Move UP if lower than target
     if (current_deg < target_deg - tolerance) {
         while (current_deg < target_deg - tolerance && timeout < 100) {
-            liftmotors.move(127);
+            moveLiftLevel(127);
             pros::delay(10);
             current_deg = rotation_sensor.get_position() / 100.0;
             timeout++;
@@ -71,17 +89,16 @@ void liftAutoHeight(double target_deg) {
     // Move DOWN if higher than target
     else if (current_deg > target_deg + tolerance) {
         while (current_deg > target_deg + tolerance && timeout < 100) {
-            liftmotors.move(-80);
+            moveLiftLevel(-80);
             pros::delay(10);
             current_deg = rotation_sensor.get_position() / 100.0;
             timeout++;
         }
     }
 
-    // hold both motors at the same spot (same as driver control) so the lift
-    // levels out even if one side lagged on the way up. brake() would freeze
-    // each motor wherever it stopped and keep the slant.
+    // hold both sides at the spot halfway between them, so neither side
+    // gets told to go somewhere it physically can't reach
     liftmotors.move_velocity(0);
-    double currentPos = liftmotors.get_position(); // motor 15's position
-    liftmotors.move_absolute(currentPos, 100);     // send BOTH motors there
+    double holdPos = (liftLeft.get_position() + liftRight.get_position()) / 2.0;
+    liftmotors.move_absolute(holdPos, 100);
 }

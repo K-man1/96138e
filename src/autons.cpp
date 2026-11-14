@@ -1,7 +1,8 @@
-﻿#include "autons.hpp"
+#include "autons.hpp"
 #include "config.hpp"
 #include "lift.hpp"
 #include "clamp.hpp"
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -95,15 +96,77 @@ static bool odomOk() {
 }
 
 // ---------------------------------------------------------------------------
+// Slow drive (no speed-up at the end)
+// ---------------------------------------------------------------------------
+
+// LemLib's moveToPoint raises maxSpeed to at least 60 once it's within 7.5"
+// of the target (its "settling" mode), so {.maxSpeed = 30} speeds up right as
+// it reaches the stack. This drives forward at a steady `speed` the whole way
+// instead, steering toward (x, y) using the odom heading.
+// Blocks until it reaches the point, drives past it, or timeoutMs runs out.
+// Forwards only.
+static void slowDriveTo(float x, float y, int speed, int timeoutMs) {
+    constexpr float kTurnP = 1.0f;      // turn power per degree off course
+    constexpr float kStopIn = 0.5f;     // done when this close (inches)
+    constexpr float kNoSteerIn = 3.0f;  // stop steering this close: the angle to the point gets jumpy
+
+    chassis.waitUntilDone(); // finish any running turn first, tank() doesn't wait for it
+
+    const lemlib::Pose start = chassis.getPose();
+    const float startDx = x - start.x;
+    const float startDy = y - start.y;
+    const uint32_t deadline = pros::millis() + timeoutMs;
+
+    while (pros::millis() < deadline) {
+        lemlib::Pose p = chassis.getPose();
+        if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.theta)) break; // odom broke
+
+        float dx = x - p.x;
+        float dy = y - p.y;
+        float dist = std::hypot(dx, dy);
+        if (dist < kStopIn) break;
+        if (dx * startDx + dy * startDy < 0) break; // drove past it
+
+        float turn = 0;
+        if (dist > kNoSteerIn) {
+            // LemLib heading: degrees, 0 = +Y, clockwise is positive
+            float targetHeading = std::atan2(dx, dy) * 180.0f / (float)M_PI;
+            float error = std::remainder(targetHeading - p.theta, 360.0f); // -180..180
+            turn = std::clamp(error * kTurnP, -speed / 2.0f, speed / 2.0f);
+        }
+
+        // true = skip the joystick drive curve so 30 really means 30
+        chassis.tank((int)(speed + turn), (int)(speed - turn), true);
+        pros::delay(10);
+    }
+    chassis.tank(0, 0, true);
+}
+
+// ---------------------------------------------------------------------------
 // Routines
 // ---------------------------------------------------------------------------
 
 
-void auton1() {
+// mirror = false: the normal routine (slot 1).
+// mirror = true:  the same routine on the other alliance goal's side of the
+//                 field (slot 2), flipped over the center line x = 72.
+// Every hard-coded field x goes through X() and every heading through H(),
+// so tuning a number here tunes both sides. New moves: wrap them the same way.
+//   X(x) = 144 - x when mirrored     H(h) = -h when mirrored
+// y values don't change. turnToPoint/slowDriveTo just need X() on the x.
+void auton1(bool mirror) {
+    auto X = [mirror](float x) { return mirror ? 144.0f - x : x; };
+    auto H = [mirror](float h) { return mirror ? -h : h; };
 
     chassis.setPose(0, 0, 0);
 
     clamp.move(127); //start intake
+    pros::delay(500);
+    chassis.tank(0, 0);
+    pros::delay(100);
+    chassis.tank(-120, -120);
+    pros::delay(500);
+    chassis.tank(0, 0);
     chassis.tank(90, 90);
     pros::delay(500);
     chassis.tank(0, 0);
@@ -112,7 +175,7 @@ void auton1() {
     pros::delay(500);
     chassis.tank(0, 0);
 
-    chassis.turnToHeading(0, 1000);
+    chassis.turnToHeading(H(0), 1000);
     //----------------TOGGLE---------------
 
     double start = 144 - right.get_distance() * 0.0393701 - 6; // convert mm to inches
@@ -122,32 +185,47 @@ void auton1() {
     pros::delay(30); // let odom update a couple times so a bad sensor shows up
     odomOk();        // if this prints an error, the moves below won't run
 
-    chassis.moveToPoint(start, 25, 5000); // align w goal
+    chassis.moveToPoint(start, 25, 5000); // align w goal (start is measured, already the real x: no X())
 
 
-    chassis.turnToHeading(90, 2000); //turn to alliance goal
+    chassis.turnToHeading(H(90), 2000); //turn to alliance goal
 
     liftAutoHeight(19); //lift lift
 
 
-    chassis.moveToPoint(91, 25, 2000, {.maxSpeed = 50}); //go into goal
+    chassis.moveToPoint(X(91), 25, 2000, {.maxSpeed = 50}); //go into goal
 
     
     chassis.waitUntilDone();
     liftAutoHeight(5);
     pros::delay(100); 
-    chassis.turnToHeading(90, 1000);
+    chassis.turnToHeading(H(90), 1000);
     clamp.move(-60); //outtake
     pros::delay(300); //wait
     clamp.move(-0);
 
     //-------------PRELOAD + TOGGLE-----------------
 
-    chassis.moveToPoint(72, 24, 2000, {.forwards = false}); //back out of goal
-    chassis.turnToPoint(89.5, 44, 1000);
+    chassis.moveToPoint(X(72), 24, 2000, {.forwards = false}); //back out of goal
+
+    // 1st stack: same 45 deg line from (72,24) through (89,41), but keep going
+    // stack1ExtraIn inches past (89,41). Want it deeper -> raise it, too far -> lower it.
+    const float stack1ExtraIn = 3;
+    const float stack1X = X(89 + stack1ExtraIn * 0.7071f); // 0.7071 = cos(45) = sin(45)
+    const float stack1Y = 41 + stack1ExtraIn * 0.7071f;
+
+    chassis.turnToPoint(stack1X, stack1Y, 1000);
     
     clamp.move(-127);
-    chassis.moveToPoint(88, 41, 6000, {.maxSpeed = 60}); //go to 1st stack (about 45 deg from 72,24)
+    chassis.waitUntilDone(); // finish the turn so the timing below starts when the drive starts
+    // slowDriveTo blocks, so this runs alongside it in the background:
+    // reverse for the first 0.5 s of the drive, stop, then intake at 130 mm
+    pros::Task([] {
+        pros::delay(500);
+        clamp.move(0);
+        clampAtDistance(130);
+    });
+    slowDriveTo(stack1X, stack1Y, 30, 10000); //go to 1st stack (45 deg from 72,24), steady 30 the whole way
     // timed intake (no sensor): this many ms after the drive starts.
     // late -> lower it, early -> raise it. try steps of 50.
     // from video: drive starts ~5.42s, stack hits the rollers ~6.37s (0.95s later).
@@ -157,28 +235,39 @@ void auton1() {
     pros::delay(2000);
 
 
-    chassis.turnToHeading(180, 1000);
+    chassis.turnToHeading(H(180), 1000);
     liftAutoHeight(34);
-    chassis.moveToPoint(96, 33, 3000, {.maxSpeed = 70}); //go to alliance goal
+    chassis.moveToPoint(X(96), 32, 3000, {.maxSpeed = 70}); //go to alliance goal
     chassis.waitUntilDone();
     liftAutoHeight(16);
     clamp.move(-120);
     pros::delay(2000);
-    chassis.moveToPoint(96, 42, 3000, {.forwards = false});
-    chassis.turnToPoint(116, 32, 1000); //turn to second stack
+    chassis.moveToPoint(X(96), 42, 3000, {.forwards = false});
+    liftAutoHeight(0);
+
+    chassis.turnToPoint(X(116), 32, 1000); //turn to second stack
     // stack sensor: intake once the stack is 125 mm away (watches for 5 s)
     // clampWhenClose(5000, 55); // speed-adjusted version
-    chassis.moveToPoint(116, 32, 3000, {.maxSpeed = 60}); //go into second stack
+    clamp.move(-127);
+    chassis.waitUntilDone(); // finish the turn so the clamp starts watching when the drive starts
+    clampAtDistance(150);    // must come BEFORE slowDriveTo: it runs in the background, slowDriveTo blocks
+    slowDriveTo(X(116), 32, 30, 3000); //go into second stack, steady 30 the whole way
+
     chassis.waitUntilDone();
     clamp.move(127);
-    chassis.turnToHeading(-90, 1000);
+    pros::delay(1000);
+    chassis.turnToHeading(H(-90), 1000);
     liftAutoHeight(34);
-    chassis.moveToPoint(102, 25, 3000); //go to alliance goal
+    chassis.moveToPoint(X(105), 25, 3000, {.maxSpeed = 70}); //go to alliance goal
     chassis.waitUntilDone();
     liftAutoHeight(0);
     clamp.move(-127);
 
-    pros::delay(20000);
+    pros::delay(1000);
+
+    chassis.moveToPoint(X(131), chassis.getPose().y, 3000);
+    chassis.turnToHeading(H(180), 1000);
+    chassis.moveToPoint(X(131), 10, 3000);
     
 
 

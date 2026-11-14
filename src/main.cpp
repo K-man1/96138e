@@ -11,6 +11,12 @@
 //   clamp.cpp   - clamp driver control (R2/L2/X)
 //   autons.cpp  - autonomous routines
 
+// Which side auton1 runs on.
+//   false = normal routine            -> upload to slot 1
+//   true  = mirrored, other alliance goal -> upload to slot 2
+// Keep this false in the code; flip it to true only to upload slot 2.
+constexpr bool kMirrorAuton = false;
+
 // farthest Y reached since auton started (for linear PID tuning)
 double maxY = 0;
 
@@ -106,7 +112,7 @@ void competition_initialize() {}
  * Runs during auton
  */
 void autonomous() {
-    auton1();
+    auton1(kMirrorAuton);
 }
 
 /**

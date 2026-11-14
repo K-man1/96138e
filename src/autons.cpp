@@ -2,6 +2,8 @@
 #include "config.hpp"
 #include "lift.hpp"
 #include "clamp.hpp"
+#include <cmath>
+#include <vector>
 
 // get a path used for pure pursuit
 // this needs to be put outside a function
@@ -54,6 +56,45 @@ else if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
 */
 
 // ---------------------------------------------------------------------------
+// Odom check
+// ---------------------------------------------------------------------------
+
+// LemLib moves (moveToPoint, turnToHeading...) silently do nothing if the
+// pose is NaN. That happens when a sensor odom reads gives an error value:
+// the IMU, or any drive motor (LemLib uses the drive motor encoders since
+// there's no vertical tracking wheel). chassis.tank() still works, so the
+// robot does the bump and then just sits there.
+// This finds the bad device and shows it on the controller + brain line 6.
+static bool allFinite(const std::vector<double>& values) {
+    for (double v : values) {
+        if (!std::isfinite(v)) return false;
+    }
+    return true;
+}
+
+static bool odomOk() {
+    const char* problem = nullptr;
+
+    if (!std::isfinite(imu.get_rotation())) {
+        problem = "IMU ERR port 4";
+    } else if (!allFinite(leftmotors.get_position_all())) {
+        problem = "L DRIVE MOTOR ERR";
+    } else if (!allFinite(rightmotors.get_position_all())) {
+        problem = "R DRIVE MOTOR ERR";
+    } else {
+        lemlib::Pose p = chassis.getPose();
+        if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.theta)) {
+            problem = "ODOM NaN";
+        }
+    }
+
+    if (problem == nullptr) return true;
+    controller.print(0, 0, "%s", problem);
+    pros::lcd::print(6, "%s", problem);
+    return false;
+}
+
+// ---------------------------------------------------------------------------
 // Routines
 // ---------------------------------------------------------------------------
 
@@ -78,8 +119,10 @@ void auton1() {
     double startY = backSensor.get_distance() * 0.0393701 + 3.4; // back sensor Y after the bump, mm to inches, +3 sensor-to-center
     pros::lcd::print(6, "Start: %.2f, %.2f in", start, startY);
     chassis.setPose(start, startY, 0); //start
+    pros::delay(30); // let odom update a couple times so a bad sensor shows up
+    odomOk();        // if this prints an error, the moves below won't run
 
-    chassis.moveToPoint(start, 26, 5000); // align w goal
+    chassis.moveToPoint(start, 25, 5000); // align w goal
 
 
     chassis.turnToHeading(90, 2000); //turn to alliance goal
@@ -87,7 +130,7 @@ void auton1() {
     liftAutoHeight(19); //lift lift
 
 
-    chassis.moveToPoint(89, 26, 2000, {.maxSpeed = 50}); //go into goal
+    chassis.moveToPoint(91, 25, 2000, {.maxSpeed = 50}); //go into goal
 
     
     chassis.waitUntilDone();
@@ -101,30 +144,42 @@ void auton1() {
     //-------------PRELOAD + TOGGLE-----------------
 
     chassis.moveToPoint(72, 24, 2000, {.forwards = false}); //back out of goal
-    chassis.turnToPoint(96, 54, 1000);
+    chassis.turnToPoint(89.5, 44, 1000);
     
-    chassis.moveToPoint(96, 50, 3000, {.maxSpeed = 50}); //go to 1st stack (about 45 deg from 72,24)
-
     clamp.move(-127);
-    clampWhenClose(150, 5000); // for the next 3s, intake if the stack is within 100mm
+    chassis.moveToPoint(88, 41, 6000, {.maxSpeed = 60}); //go to 1st stack (about 45 deg from 72,24)
+    // timed intake (no sensor): this many ms after the drive starts.
+    // late -> lower it, early -> raise it. try steps of 50.
+    // from video: drive starts ~5.42s, stack hits the rollers ~6.37s (0.95s later).
+    // minus ~0.2s so the clamp has reversed and is spinning in before it arrives.
+    chassis.waitUntilDone();
+    clamp.move(127);
+    pros::delay(2000);
 
 
     chassis.turnToHeading(180, 1000);
-    liftAutoHeight(19);
-    chassis.moveToPoint(96, 28, 3000, {.maxSpeed = 60}); //go to alliance goal
+    liftAutoHeight(34);
+    chassis.moveToPoint(96, 33, 3000, {.maxSpeed = 70}); //go to alliance goal
     chassis.waitUntilDone();
     liftAutoHeight(16);
     clamp.move(-120);
     pros::delay(2000);
-    chassis.moveToPoint(96, 40, 3000, {.forwards = false});
-    chassis.turnToPoint(120, 24, 1000);
-    chassis.moveToPoint(120, 24, 3000);
-    clampWhenClose(150, 5000);
-    pros::delay(1000);
+    chassis.moveToPoint(96, 42, 3000, {.forwards = false});
+    chassis.turnToPoint(116, 32, 1000); //turn to second stack
+    // stack sensor: intake once the stack is 125 mm away (watches for 5 s)
+    // clampWhenClose(5000, 55); // speed-adjusted version
+    chassis.moveToPoint(116, 32, 3000, {.maxSpeed = 60}); //go into second stack
+    chassis.waitUntilDone();
+    clamp.move(127);
     chassis.turnToHeading(-90, 1000);
-    liftAutoHeight(25);
-    // clamp.move(127);
-    // liftAutoHeight(3);
+    liftAutoHeight(34);
+    chassis.moveToPoint(102, 25, 3000); //go to alliance goal
+    chassis.waitUntilDone();
+    liftAutoHeight(0);
+    clamp.move(-127);
+
+    pros::delay(20000);
+    
 
 
     
@@ -135,7 +190,7 @@ void auton2() {
     chassis.cancelAllMotions();
 
     // wrist.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-    liftmotors.tare_position();
+    liftmotors.tare_position_all();
     // wrist.tare_position();
 
     // chassis.moveToPoint(0, 0, 1000, {.forwards = false});

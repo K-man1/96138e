@@ -16,6 +16,7 @@ double maxY = 0;
 
 // prints odom + lift info to the brain screen
 void screenTask() {
+    int controllerTick = 0;
     while (true) {
 
         double degrees = rotation_sensor.get_position() / 100.0 ;
@@ -27,8 +28,18 @@ void screenTask() {
         pros::lcd::print(1, "Y: %.2f", chassis.getPose().y);
         pros::lcd::print(2, "Theta: %.2f", chassis.getPose().theta);
         pros::lcd::print(3, "Lift L: %.1f  R: %.1f", liftmotors.get_position(0), liftmotors.get_position(1));
-        pros::lcd::print(4, "Rotation: %.2f degrees", degrees);
+        pros::lcd::print(4, "Rot: %.2f deg  Lift temp: %.0f/%.0f C", degrees,
+                         liftmotors.get_temperature(0), liftmotors.get_temperature(1));
         pros::lcd::print(7, "Stack: %d mm  Back: %d mm", stackSensor.get_distance(), backSensor.get_distance());
+
+        // X on controller row 2 (rows 0-1 are used for errors / "BOB").
+        // Only every 3rd loop (150 ms): the controller drops prints sent
+        // <50 ms apart, so this leaves room for other controller.print calls.
+        // Trailing spaces clear leftover digits when the number gets shorter.
+        if (++controllerTick >= 3) {
+            controllerTick = 0;
+            controller.print(2, 0, "X: %.2f      ", chassis.getPose().x);
+        }
 
         pros::delay(50);
     }
@@ -55,7 +66,7 @@ void initialize() {
         pros::delay(10);
     }
     if (!std::isfinite(imu.get_rotation())) {
-        controller.print(0, 0, "IMU NOT READY");
+        controller.print(0, 0, "IMU NOT READY"); // controller only has rows 0-2
     }
     pros::delay(50); // let odom take a few good IMU readings before setPose clears the heading
 
@@ -63,11 +74,11 @@ void initialize() {
     rotation_sensor.reset_position();
     pros::delay(50);
 
-    liftmotors.tare_position();
+    liftmotors.tare_position_all();
     // claw.tare_position();
     // wrist.tare_position();
 
-    liftmotors.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    liftmotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
     // wrist.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
 
     pros::Task screen(screenTask);
@@ -77,6 +88,8 @@ void initialize() {
     chassis.setPose(start, startY, 0); //start
     pros::lcd::print(6, "Start: %.2f, %.2f in", start, startY);
 
+    pros::delay(50); // controller ignores prints sent less than 50 ms apart
+    controller.print(1, 0, "BOB");
 }
 
 /*
@@ -103,12 +116,11 @@ void opcontrol() {
     // 1. Force-cancel any leftover LemLib movements from autonomous
     chassis.cancelAllMotions();
 
-    // 2. Set brake modes
-    liftmotors.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    // 2. Lock the lift (holds if raised, rests passively if at the bottom)
+    liftHold();
     // wrist.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
 
     // 3. Lock motors instantly without triggering blocking PID calls
-    liftmotors.move_velocity(0);
     // wrist.move_velocity(0);
 
     while (true) {

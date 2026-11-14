@@ -8,5 +8,9 @@
 // Holds position when the buttons are released.
 void liftControl();
 
+// Stop the lift and keep it in place. Each motor holds its own position;
+// near the bottom the motors switch to passive brake so they don't heat up.
+void liftHold();
+
 // Auton: drive the lift until the rotation sensor reads target_deg (1s timeout).
 void liftAutoHeight(double target_deg);

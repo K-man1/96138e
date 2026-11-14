@@ -8,7 +8,7 @@
 
 // build number: bump this every upload so you can check the robot has the new code
 // (shown on the controller screen and brain line 7)
-constexpr int BUILD_NUM = 3;
+constexpr int BUILD_NUM = 4;
 
 // handheld controller
 extern pros::Controller controller;

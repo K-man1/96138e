@@ -3,6 +3,23 @@
 
 static bool isLiftManualMoving = false;
 
+// below this rotation-sensor reading the lift is resting on the bottom,
+// so the motors can switch off instead of actively holding
+constexpr double kLiftRestDeg = 1.0;
+
+// stop the lift and keep it where it is.
+// brake() in HOLD mode locks each motor at its OWN position. the old code sent
+// both motors to one shared move_absolute target, and since their encoders never
+// match exactly, the two motors pushed against each other nonstop -> overheating.
+void liftHold() {
+    if (rotation_sensor.get_position() / 100.0 < kLiftRestDeg) {
+        liftmotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_BRAKE); // passive, no current
+    } else {
+        liftmotors.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
+    }
+    liftmotors.brake();
+}
+
 // true if any controller button other than Y is held
 static bool anyOtherButtonPressed() {
     using namespace pros;
@@ -31,9 +48,7 @@ void liftControl() {
     }
 
     else if (isLiftManualMoving) {
-        liftmotors.move_velocity(0);
-        double currentPos = liftmotors.get_position();
-        liftmotors.move_absolute(currentPos, 100);
+        liftHold();
         isLiftManualMoving = false;
     }
 
@@ -47,8 +62,7 @@ void liftControl() {
             pros::delay(10);
         }
         // Lock at arrival spot
-        double currentPos = liftmotors.get_position();
-        liftmotors.move_absolute(currentPos, 100);
+        liftHold();
     }
 }
 
@@ -71,8 +85,6 @@ static void moveLiftLevel(int power) {
 }
 
 void liftAutoHeight(double target_deg) {
-    liftmotors.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-
     double current_deg = rotation_sensor.get_position() / 100.0;
     int timeout = 0;
     double tolerance = 0.5; // Stops within 0.5 degrees of target
@@ -96,9 +108,6 @@ void liftAutoHeight(double target_deg) {
         }
     }
 
-    // hold both sides at the spot halfway between them, so neither side
-    // gets told to go somewhere it physically can't reach
-    liftmotors.move_velocity(0);
-    double holdPos = (liftLeft.get_position() + liftRight.get_position()) / 2.0;
-    liftmotors.move_absolute(holdPos, 100);
+    // each side holds where it is (a shared target makes the sides fight)
+    liftHold();
 }
